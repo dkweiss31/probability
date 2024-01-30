@@ -182,14 +182,14 @@ class DormandPrince(base.Solver):
         max_num_steps = tf.convert_to_tensor(max_num_steps, dtype=tf.int32)
         max_ode_fn_evals = max_num_steps * self.ODE_FN_EVALS_PER_STEP
       step_size = tf.convert_to_tensor(
-          self._first_step_size, dtype=p.real_dtype)
-      rtol = tf.convert_to_tensor(tf.cast(self._rtol, p.real_dtype))
-      atol = tf.convert_to_tensor(tf.cast(self._atol, p.real_dtype))
-      safety = tf.convert_to_tensor(self._safety_factor, dtype=p.real_dtype)
+          self._first_step_size, dtype=p.common_state_dtype)
+      rtol = tf.convert_to_tensor(tf.cast(self._rtol, p.common_state_dtype))
+      atol = tf.convert_to_tensor(tf.cast(self._atol, p.common_state_dtype))
+      safety = tf.convert_to_tensor(self._safety_factor, dtype=p.common_state_dtype)
       # Use i(d)factor notation for increasing and decreasing factors.
       ifactor, dfactor = self._max_step_size_factor, self._min_step_size_factor
-      ifactor = tf.convert_to_tensor(ifactor, dtype=p.real_dtype)
-      dfactor = tf.convert_to_tensor(dfactor, dtype=p.real_dtype)
+      ifactor = tf.convert_to_tensor(ifactor, dtype=p.common_state_dtype)
+      dfactor = tf.convert_to_tensor(dfactor, dtype=p.common_state_dtype)
 
       solver_internal_state = previous_solver_internal_state
       if solver_internal_state is None:
@@ -201,18 +201,18 @@ class DormandPrince(base.Solver):
 
       num_solution_times = 0
       if solution_times_by_solver:
-        final_time = tf.cast(solution_times.final_time, p.real_dtype)
+        final_time = tf.cast(solution_times.final_time, p.common_state_dtype)
         times_array = tf.TensorArray(
-            p.real_dtype,
+            p.common_state_dtype,
             size=num_solution_times,
             dynamic_size=True,
             element_shape=tf.TensorShape([]))
       else:
-        solution_times = tf.cast(solution_times, p.real_dtype)
+        solution_times = tf.cast(solution_times, p.common_state_dtype)
         util.error_if_not_vector(solution_times, 'solution_times')
         num_solution_times = ps.size(solution_times)
         times_array = tf.TensorArray(
-            p.real_dtype,
+            p.common_state_dtype,
             size=num_solution_times,
             dynamic_size=False,
             element_shape=[]).unstack(solution_times)
@@ -309,7 +309,7 @@ class DormandPrince(base.Solver):
     initial_derivative = ode_fn(p.initial_time, p.initial_state)
     initial_derivative = tf.nest.map_structure(tf.convert_to_tensor,
                                                initial_derivative)
-    step_size = tf.convert_to_tensor(self._first_step_size, dtype=p.real_dtype)
+    step_size = tf.convert_to_tensor(self._first_step_size, dtype=p.common_state_dtype)
 
     return _RungeKuttaSolverInternalState(
         current_state=p.initial_state,
@@ -340,6 +340,7 @@ class DormandPrince(base.Solver):
         state_shapes=state_shapes,
         real_dtype=real_dtype,
         initial_time=initial_time,
+        common_state_dtype=common_state_dtype,
     )
 
   def _step(
@@ -419,6 +420,7 @@ class DormandPrince(base.Solver):
     with tf.name_scope('update/state'):
       y_next = rk_util.nest_where(accept_step, y1, y0)
       f_next = rk_util.nest_where(accept_step, f1, f0)
+      dt = tf.cast(dt, dtype=t0.dtype)
       t_next = tf.where(accept_step, t0 + dt, t0)
 
       new_coefficients = rk_util.rk_fourth_order_interpolation_coefficients(
@@ -639,7 +641,8 @@ def _advance_to_solution_time(
   with tf.name_scope('advance_to_solution_time'):
     # Perform integration steps until we are past the desired time step.
     def step_cond(solver_state, _):
-      return times_array[time_id] >= solver_state.current_time
+      time_dtype = solver_state.current_time.dtype
+      return tf.cast(times_array[time_id], dtype=time_dtype) >= solver_state.current_time
 
     solver_state, diagnostics = tf.while_loop(
         step_cond, step_fn, (solver_state, diagnostics))

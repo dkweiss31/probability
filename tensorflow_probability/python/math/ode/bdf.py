@@ -247,6 +247,7 @@ class BDF(base.Solver):
       """Takes multiple steps to advance time to `solution_times[n]`."""
 
       def step_cond(next_time, diagnostics, iterand, *_):
+        next_time = tf.cast(next_time, dtype=iterand.time.dtype)
         return (iterand.time < next_time) & (tf.equal(diagnostics.status, 0))
 
       nth_solution_time = solution_time_array.read(n)
@@ -266,11 +267,16 @@ class BDF(base.Solver):
     def step(next_time, diagnostics, iterand, solver_internal_state,
              state_vec_array, time_array):
       """Takes a single step."""
+      original_dtype = next_time.dtype
+      next_time = tf.cast(next_time, dtype=iterand.time.dtype)
       distance_to_next_time = next_time - iterand.time
-      overstepped = iterand.new_step_size > distance_to_next_time
+      new_step_size = tf.cast(iterand.new_step_size, dtype=iterand.time.dtype)
+      overstepped = new_step_size > distance_to_next_time
+      # convert back to original types
+      distance_to_next_time = tf.cast(distance_to_next_time, dtype=original_dtype)
+      new_step_size = tf.cast(new_step_size, dtype=original_dtype)
       iterand = iterand._replace(
-          new_step_size=tf1.where(overstepped, distance_to_next_time,
-                                  iterand.new_step_size),
+          new_step_size=tf1.where(overstepped, distance_to_next_time, new_step_size),
           should_update_step_size=overstepped | iterand.should_update_step_size)
 
       if not self._evaluate_jacobian_lazily:
@@ -356,7 +362,7 @@ class BDF(base.Solver):
         unitary, upper = update_factorization()
         num_matrix_factorizations += 1
 
-      tol = p.atol + p.rtol * tf.abs(backward_differences[0])
+      tol = tf.cast(p.atol + p.rtol * tf.abs(backward_differences[0]), dtype=p.common_state_dtype)
       newton_tol = newton_tol_factor * tf.norm(tol)
 
       [
@@ -477,9 +483,9 @@ class BDF(base.Solver):
           initial_time=initial_time,
       )
 
-      if jacobian_fn is None and dtype_util.is_complex(p.common_state_dtype):
-        raise NotImplementedError('The BDF solver does not support automatic '
-                                  'Jacobian computations for complex dtypes.')
+      # if jacobian_fn is None and dtype_util.is_complex(p.common_state_dtype):
+      #   raise NotImplementedError('The BDF solver does not support automatic '
+      #                             'Jacobian computations for complex dtypes.')
 
       # Convert everything to operate on a single, concatenated vector form.
       jacobian_fn_mat = util.get_jacobian_fn_mat(
@@ -491,19 +497,19 @@ class BDF(base.Solver):
 
       num_solution_times = 0
       if solution_times_chosen_by_solver:
-        final_time = tf.cast(solution_times.final_time, p.real_dtype)
+        final_time = tf.cast(solution_times.final_time, p.common_state_dtype)
       else:
-        solution_times = tf.cast(solution_times, p.real_dtype)
-        final_time = tf.reduce_max(solution_times)
+        solution_times = tf.cast(solution_times, p.common_state_dtype)
+        final_time = tf.reduce_max(tf.math.abs(solution_times))
         num_solution_times = ps.size(solution_times)
         solution_time_array = tf.TensorArray(
             solution_times.dtype, size=num_solution_times,
             element_shape=[]).unstack(solution_times)
         util.error_if_not_vector(solution_times, 'solution_times')
       min_step_size_factor = tf.convert_to_tensor(
-          self._min_step_size_factor, dtype=p.real_dtype)
+          self._min_step_size_factor, dtype=p.common_state_dtype)
       max_step_size_factor = tf.convert_to_tensor(
-          self._max_step_size_factor, dtype=p.real_dtype)
+          self._max_step_size_factor, dtype=p.common_state_dtype)
       max_num_steps = self._max_num_steps
       if max_num_steps is not None:
         max_num_steps = tf.convert_to_tensor(max_num_steps, dtype=tf.int32)
@@ -513,9 +519,9 @@ class BDF(base.Solver):
         max_num_newton_iters = tf.convert_to_tensor(
             max_num_newton_iters, dtype=tf.int32)
       newton_tol_factor = tf.convert_to_tensor(
-          self._newton_tol_factor, dtype=p.real_dtype)
+          self._newton_tol_factor, dtype=p.common_state_dtype)
       newton_step_size_factor = tf.convert_to_tensor(
-          self._newton_step_size_factor, dtype=p.real_dtype)
+          self._newton_step_size_factor, dtype=p.common_state_dtype)
       newton_coefficients, error_coefficients = self._prepare_coefficients(
           p.common_state_dtype)
       if self._validate_args:
@@ -552,7 +558,7 @@ class BDF(base.Solver):
           dynamic_size=solution_times_chosen_by_solver,
           element_shape=p.initial_state_vec.shape)
       time_array = tf.TensorArray(
-          p.real_dtype,
+          p.common_state_dtype,
           size=num_solution_times,
           dynamic_size=solution_times_chosen_by_solver,
           element_shape=tf.TensorShape([]))
@@ -661,7 +667,7 @@ class BDF(base.Solver):
       first_step_size = bdf_util.first_step_size(
           p.atol, error_coefficients[1], p.initial_state_vec,
           p.initial_time, p.ode_fn_vec, p.rtol, p.safety_factor)
-    first_step_size = tf.convert_to_tensor(first_step_size, dtype=p.real_dtype)
+    first_step_size = tf.convert_to_tensor(tf.cast(first_step_size, dtype=p.common_state_dtype))
     if self._validate_args:
       first_step_size = tf.ensure_shape(first_step_size, [])
 

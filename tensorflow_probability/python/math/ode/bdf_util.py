@@ -127,7 +127,8 @@ def newton(backward_differences, max_num_iters, newton_coefficient, ode_fn_vec,
 
   next_time = time + step_size
   step_size_cast = tf.cast(step_size, backward_differences.dtype)
-  real_dtype = tf.abs(backward_differences).dtype
+  common_dtype = backward_differences.dtype
+#   real_dtype = tf.abs(backward_differences).dtype
 
   def newton_body(iterand):
     """Performs one iteration of Newton's method."""
@@ -147,13 +148,13 @@ def newton(backward_differences, max_num_iters, newton_coefficient, ode_fn_vec,
     next_backward_difference += delta
     next_state_vec += delta
 
-    delta_norm = tf.cast(tf.norm(delta), real_dtype)
+    delta_norm = tf.cast(tf.norm(delta), common_dtype)
     lipschitz_const = delta_norm / iterand.prev_delta_norm
 
     # Stop if method has converged.
     approx_dist_to_sol = lipschitz_const / (1. - lipschitz_const) * delta_norm
     close_to_sol = approx_dist_to_sol < tol
-    delta_norm_is_zero = tf.equal(delta_norm, tf.constant(0., dtype=real_dtype))
+    delta_norm_is_zero = tf.equal(delta_norm, tf.constant(0., dtype=common_dtype))
     converged = close_to_sol | delta_norm_is_zero
     finished = converged
 
@@ -166,7 +167,7 @@ def newton(backward_differences, max_num_iters, newton_coefficient, ode_fn_vec,
     if max_num_iters is not None:
       too_many_iters = tf.equal(num_iters, max_num_iters)
       num_iters_left = max_num_iters - num_iters
-      num_iters_left_cast = tf.cast(num_iters_left, real_dtype)
+      num_iters_left_cast = tf.cast(num_iters_left, common_dtype)
       wont_converge = (
           approx_dist_to_sol * lipschitz_const**num_iters_left_cast > tol)
       finished = finished | too_many_iters | wont_converge
@@ -187,7 +188,7 @@ def newton(backward_differences, max_num_iters, newton_coefficient, ode_fn_vec,
       next_backward_difference=tf.zeros_like(initial_guess),
       next_state_vec=tf.identity(initial_guess),
       num_iters=0,
-      prev_delta_norm=tf.constant(np.array(-0.), dtype=real_dtype))
+      prev_delta_norm=tf.constant(np.array(-0.), dtype=common_dtype))
   [iterand] = tf.while_loop(lambda iterand: tf.logical_not(iterand.finished),
                             newton_body, [iterand])
   return (iterand.converged, iterand.next_backward_difference,

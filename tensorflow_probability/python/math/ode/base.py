@@ -245,13 +245,12 @@ class Solver(object):
                                       'not support complex dtypes.')
 
         state_dtypes = tf.nest.map_structure(get_dtype, initial_state)
-        tf.nest.map_structure(error_if_complex, state_dtypes)
+        # tf.nest.map_structure(error_if_complex, state_dtypes)
         common_state_dtype = dtype_util.common_dtype(initial_state)
-        real_dtype = dtype_util.real_dtype(common_state_dtype)
 
         # We add initial_time to ensure that we know where to stop.
         result_times = tf.concat(
-            [[tf.cast(initial_time, real_dtype)], results.times], 0)
+            [[tf.cast(initial_time, common_state_dtype)], results.times], 0)
         num_result_times = tf.size(result_times)
 
         # First two components correspond to reverse and adjoint states.

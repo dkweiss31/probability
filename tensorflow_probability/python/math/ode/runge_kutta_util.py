@@ -242,9 +242,9 @@ def evaluate_interpolation(coefficients, t0, t1, t, validate_args=False):
     raise ValueError('`coefficients` must have at least 2 elements.')
   with tf.name_scope('interp_evaluate'):
     dtype = dtype_util.common_dtype(coefficients)
-    t0 = tf.convert_to_tensor(t0)
-    t1 = tf.convert_to_tensor(t1)
-    t = tf.convert_to_tensor(t)
+    t0 = tf.convert_to_tensor(tf.cast(t0, dtype=dtype))
+    t1 = tf.convert_to_tensor(tf.cast(t1, dtype=dtype))
+    t = tf.convert_to_tensor(tf.cast(t, dtype=dtype))
     assert_ops = []
     if validate_args:
       assert_ops.append(tf.Assert(
@@ -285,8 +285,8 @@ def runge_kutta_step(ode_fn,
   with tf.name_scope(name):
     y0 = tf.nest.map_structure(tf.convert_to_tensor, y0)
     f0 = tf.nest.map_structure(tf.convert_to_tensor, f0)
-    t0 = tf.convert_to_tensor(t0, name='t0')
-    dt = tf.convert_to_tensor(dt, name='dt')
+    t0 = tf.cast(tf.convert_to_tensor(t0, name='t0'), dtype=y0.dtype)
+    dt = tf.cast(tf.convert_to_tensor(dt, name='dt'), dtype=y0.dtype)
 
     k = [f0]
     for a_i, b_i in zip(tableau.a, tableau.b):

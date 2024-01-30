@@ -238,6 +238,9 @@ def next_step_size(step_size, order, error_ratio, safety_factor,
   """
   order_cast = tf.cast(order, error_ratio.dtype)
   factor = error_ratio**(-1. / (order_cast + 1.))
+  min_step_size_factor = tf.cast(min_step_size_factor, dtype=factor.dtype)
+  max_step_size_factor = tf.cast(max_step_size_factor, dtype=factor.dtype)
+  safety_factor = tf.cast(safety_factor, dtype=factor.dtype)
   return step_size * tf.clip_by_value(
       safety_factor * factor, min_step_size_factor, max_step_size_factor)
 
